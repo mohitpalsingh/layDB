@@ -111,10 +111,10 @@ func (l *Log) appendEntry(dst []byte, data []byte) (out []byte, cpos bpos) {
 }
 
 func appendBinaryEntry(dst []byte, data []byte) (out []byte, cpos bpos) {
-	pos := len(dst)
-	dst = appendUvarint(dst, uint64(len(data)))
-	dst = append(dst, data...)
-	return dst, bpos{pos, len(dst)}
+	pos := len(dst)                             // storing the current end position of the current data
+	dst = appendUvarint(dst, uint64(len(data))) // appending the length of the new data
+	dst = append(dst, data...)                  // appending the actual data
+	return dst, bpos{pos, len(dst)}             // returning the new data and struct for the offset of the data appended as well as the end aka final length
 }
 
 func appendUvarint(dst []byte, x uint64) []byte {
@@ -159,13 +159,13 @@ func (l *Log) WriteBatch(b *Batch) error {
 
 func (l *Log) writeBatch(b *Batch) error {
 	datas := b.datas
+	offset := 0
 	for i := 0; i < len(b.entries); i++ {
-		// data := datas[:b.entries[i].size]
-		datas = datas[b.entries[i].size:]
-	}
-
-	if _, err := l.sfile.Write(datas); err != nil {
-		return err
+		data := datas[offset:b.entries[i].size]
+		if _, err := l.sfile.Write(data); err != nil {
+			return err
+		}
+		offset += b.entries[i].size
 	}
 
 	if err := l.sfile.Sync(); err != nil {
@@ -177,15 +177,15 @@ func (l *Log) writeBatch(b *Batch) error {
 }
 
 func loadNextBinaryEntry(data []byte) (n int, err error) {
-	size, n := binary.Uvarint(data)
+	size, n := binary.Uvarint(data) // fetching the size of the first data appended
 	if n <= 0 {
-		return 0, ErrCorrupt
+		return 0, ErrCorrupt // the size encoding takes 0 bytes, not possible, hence corruption
 	}
 	if uint64(len(data)-n) < size {
-		return 0, ErrCorrupt
+		return 0, ErrCorrupt // if the data itself is smaller than the decoded size, not possible, hence corruption
 	}
 
-	return n + int(size), nil
+	return n + int(size), nil // returning the size taken by the encoded number(size) + the number of bytes taken by the first entry, hence telling the pos from where the next entry begin
 }
 
 func (l *Log) Read(index uint64) (data []byte, err error) {
@@ -198,7 +198,17 @@ func (l *Log) Read(index uint64) (data []byte, err error) {
 		return nil, ErrClosed
 	}
 	data, err = os.ReadFile(l.path)
-	size, n := binary.Uvarint(data)
+
+	offset := 0
+	for i := 0; i < int(index); i++ {
+		size, err := loadNextBinaryEntry(data)
+		if err != nil {
+			return nil, err
+		}
+		offset += size
+	}
+
+	size, n := binary.Uvarint(data[offset:])
 	if n <= 0 {
 		return nil, ErrCorrupt
 	}
@@ -208,7 +218,7 @@ func (l *Log) Read(index uint64) (data []byte, err error) {
 	}
 
 	data = make([]byte, size)
-	copy(data, data[n:])
+	copy(data, data[n+offset:n+offset+int(size)])
 
 	return data, nil
 }
