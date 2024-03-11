@@ -30,7 +30,7 @@ type bpos struct {
 	end int
 }
 
-func open(path string) (*Log, error) {
+func Open(path string) (*Log, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
