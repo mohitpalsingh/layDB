@@ -1,4 +1,4 @@
-package laydb
+package main
 
 // Tx represents a transaction on the database. This transaction can either be
 // read-only or read/write. Read-only transactions can be used for retrieving

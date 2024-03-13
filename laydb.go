@@ -1,4 +1,4 @@
-package laydb
+package main
 
 import (
 	"errors"

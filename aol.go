@@ -1,8 +1,9 @@
-package laydb
+package main
 
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -41,7 +42,6 @@ func Open(path string) (*Log, error) {
 	if err := os.MkdirAll(path, os.ModeAppend); err != nil {
 		return nil, err
 	}
-
 	if err := l.load(); err != nil {
 		return nil, err
 	}
@@ -51,13 +51,17 @@ func Open(path string) (*Log, error) {
 
 func (l *Log) load() error {
 	files, err := os.ReadDir(l.path)
+	if err != nil {
+		return err
+	}
 	if len(files) == 0 {
-		l.sfile, err = os.OpenFile(l.path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.ModeAppend)
+		fmt.Print("hryyy")
+		l.sfile, err = os.OpenFile(l.path+fmt.Sprintf("%020d", 1), os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.ModeAppend)
 		if err != nil {
 			return err
 		}
 	} else {
-		l.sfile, err = os.OpenFile(l.path, os.O_WRONLY, os.ModeAppend)
+		l.sfile, err = os.OpenFile(l.path+fmt.Sprintf("%020d", 1), os.O_WRONLY, os.ModeAppend)
 		if err != nil {
 			return err
 		}

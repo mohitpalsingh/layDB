@@ -1,4 +1,6 @@
-package laydb
+package main
+
+import "fmt"
 
 // sets the key value pair
 func (tx *Tx) Set(key string, value string) error {
@@ -34,6 +36,7 @@ func (tx *Tx) Exists(key string) bool {
 
 // helper func to fetch value of a key from DB
 func (tx *Tx) get(key string) (val string, err error) {
+	fmt.Printf("before get key %s", key)
 	v, err := tx.db.strStore.get(key)
 	if err != nil {
 		return "", err

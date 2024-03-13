@@ -1,4 +1,4 @@
-package laydb
+package main
 
 import (
 	"encoding/binary"
@@ -22,6 +22,7 @@ type (
 	// structure of record
 	record struct {
 		meta      *meta
+		state     uint16 // state represents two fields, high 8 bits is the data type, low 8 bits is operation mark.
 		timestamp uint32
 	}
 
