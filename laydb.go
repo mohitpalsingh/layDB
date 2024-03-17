@@ -3,47 +3,41 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
-var (
-	ErrInvalidKey     = errors.New("invalid key")
-	ErrTxClosed       = errors.New("tx closed")
-	ErrDatabaseClosed = errors.New("database closed")
-	ErrTxNotWritable  = errors.New("tx not writable")
-)
-
 type LayDB struct {
-	config   *Config
 	log      *Log
 	strStore *strStore
 }
 
 func NewDb(config *Config) (*LayDB, error) {
 
-	db := &LayDB{
-		config:   config,
-		strStore: newStrStore(),
-	}
+	var fileData string
+	var fileRemove string
 
-	if db.config.FileData == "" && db.config.DeleteData == "" {
-		db.config = DefaultConfig()
+	if config.FileData == "" && config.DeleteData == "" {
+		config = DefaultConfig()
 
-		if _, err := os.Stat(db.config.FilePath); os.IsNotExist(err) {
-			err := os.Mkdir(db.config.FilePath, 0700)
+		if _, err := os.Stat(config.FilePath); os.IsNotExist(err) {
+			err := os.Mkdir(config.FilePath, 0700)
 			if err != nil {
 				fmt.Println(err)
 				return nil, err
 			}
 		}
+
+		fileData = config.FilePath + "/" + "db.txt"
+		fileRemove = config.FilePath + "/" + "delete.txt"
 	}
-	fileData := db.config.FileData
-	fileRemove := db.config.DeleteData
+
+	fileData = config.FileData
+	fileRemove = config.DeleteData
 
 	file, err := os.OpenFile(fileData, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
@@ -51,16 +45,21 @@ func NewDb(config *Config) (*LayDB, error) {
 		return nil, err
 	}
 
-	fileDelete, err := os.OpenFile(fileRemove, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+	deleteFile, err := os.OpenFile(fileRemove, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Println("Error in opening fileRemove: ", err)
 		return nil, err
 	}
 
-	db.log.file = file
-	db.log.deleteFile = fileDelete
-
-	return db, nil
+	return &LayDB{
+		log: &Log{
+			file:       file,
+			deleteFile: deleteFile,
+			mu:         sync.Mutex{},
+			muDelete:   sync.Mutex{},
+		},
+		strStore: newStrStore(),
+	}, nil
 }
 
 func (db *LayDB) Get(key string) (string, error) {
@@ -113,37 +112,14 @@ func (db *LayDB) Set(key string, value string) error {
 }
 
 func (db *LayDB) setRaw(key string, value string) error {
-	offset, err := db.saveToFile(key, value)
+	offset, err := db.log.saveToFile(key, value)
 	if err != nil {
 		return err
 	}
 
-	db.setKey(key, offset)
+	db.strStore.setKey(key, offset)
 
 	return nil
-}
-
-func (db *LayDB) setKey(key string, offset int64) {
-	db.strStore.keyDir[key] = offset
-}
-
-func (db *LayDB) saveToFile(key string, value string) (int64, error) {
-	offset, err := db.log.file.Seek(0, io.SeekEnd)
-	if err != nil {
-		return 0, err
-	}
-
-	_, err = db.log.file.WriteString(key + keyValueSeparator + value + "\n")
-	if err != nil {
-		return 0, err
-	}
-
-	err = db.log.file.Sync()
-	if err != nil {
-		return 0, err
-	}
-
-	return offset, nil
 }
 
 func (db *LayDB) CompactFile() {
@@ -193,7 +169,7 @@ func (db *LayDB) Restore() {
 	items, _ := db.log.GetMapFromFile()
 
 	for _, v := range items {
-		db.setKey(v.Key, v.Offset)
+		db.strStore.setKey(v.Key, v.Offset)
 	}
 
 	db.log.file.Seek(0, 0)

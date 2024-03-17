@@ -18,7 +18,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		FilePath:   "/tmp/laydb",
-		FileData:   "/tmp/laydb/db.txt",
-		DeleteData: "/tmp/laydb/db_delete.txt",
+		FileData:   "db.txt",
+		DeleteData: "db_delete.txt",
 	}
 }

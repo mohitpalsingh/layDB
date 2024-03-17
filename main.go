@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-type RequestPayLoad struct {
+type RequestPayload struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
@@ -17,7 +17,7 @@ type ResponseJson struct {
 	Message string `json:"value"`
 }
 
-func handleSet(w http.ResponseWriter, r *http.Request) {
+func handlerSet(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -25,30 +25,37 @@ func handleSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var rp RequestPayLoad
+		var rp RequestPayload
 
 		err = json.Unmarshal(body, &rp)
 		if err != nil {
 			http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+			return
 		}
 
-		err = db.Set(rp.Key, rp.Value)
+		err = e.Set(rp.Key, rp.Value)
 		if err != nil {
 			responseJSON(w, ResponseJson{
-				Status:  "success",
-				Message: "Key Value pair saved successfully.",
-			}, http.StatusOK)
+				Status:  "error",
+				Message: err.Error(),
+			}, http.StatusInternalServerError)
+			return
 		}
+
+		responseJSON(w, ResponseJson{
+			Status:  "success",
+			Message: "Key value pair saved successfully.",
+		}, http.StatusOK)
 	} else {
 		fmt.Println("Invalid request method.")
 		fmt.Fprintf(w, "Invalid request method.")
 	}
 }
 
-func handleGet(w http.ResponseWriter, r *http.Request) {
+func handlerGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		key := r.URL.Query().Get("key")
-		value, err := db.Get(key)
+		value, err := e.Get(key)
 		if err != nil {
 			responseJSON(w, ResponseJson{
 				Status:  "error",
@@ -57,7 +64,7 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		responseJSON(w, RequestPayLoad{
+		responseJSON(w, RequestPayload{
 			Key:   key,
 			Value: value,
 		}, http.StatusOK)
@@ -67,10 +74,10 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleDelete(w http.ResponseWriter, r *http.Request) {
+func handlerDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "DELETE" {
 		key := r.URL.Query().Get("key")
-		err := db.Delete(key)
+		err := e.Delete(key)
 		if err != nil {
 			responseJSON(w, ResponseJson{
 				Status:  "error",
@@ -103,34 +110,30 @@ func responseJSON(w http.ResponseWriter, data interface{}, status int) {
 	w.Write(d)
 }
 
-var db *LayDB
+var e *LayDB
 
 func main() {
-	db, err := NewDb(&Config{
-		FilePath:   "/tmp/layDB",
-		FileData:   "/database.txt",
-		DeleteData: "/database_delete.txt",
+	e, _ = NewDb(&Config{
+		FileData:   "db.txt",
+		DeleteData: "db_delete.txt",
+		FilePath:   "",
 	})
+	defer e.Close()
+	e.Restore()
+
+	go e.CompactFile()
+	go e.DeleteFromFile()
+
+	http.HandleFunc("/set", handlerSet)
+	http.HandleFunc("/get", handlerGet)
+	http.HandleFunc("/delete", handlerDelete)
+
+	address := ":8080"
+
+	fmt.Printf("Server is listening on http://localhost%s\n", address)
+	err := http.ListenAndServe(address, nil)
 	if err != nil {
-		fmt.Println("Error opening db: ", err)
-		return
-	}
-	defer db.Close()
-
-	go db.CompactFile()
-	go db.DeleteFromFile()
-
-	http.HandleFunc("/set", handleSet)
-	http.HandleFunc("/get", handleGet)
-	http.HandleFunc("/delete", handleDelete)
-
-	address := ":8000"
-
-	fmt.Printf("Server is running on localhost:%s", address)
-	err = http.ListenAndServe(address, nil)
-	if err != nil {
-		fmt.Println("Error starting the server: ", err)
-		return
+		fmt.Println("Error:", err)
 	}
 
 }
