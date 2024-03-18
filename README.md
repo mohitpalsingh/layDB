@@ -13,3 +13,7 @@ It is designed to provide fast and efficient storage and retrieval of key-value 
 2. Optimize memory usage and performance to ensure efficient operation, even under heavy workloads.<br /> 
 3. Implement comprehensive testing to validate functionality and reliability, ensuring a stable and dependable database.<br /> 
 4. Replace native Hash map with B+ tree implementation.<br /> 
+
+<h3>How to run:</h3><br />
+1. go build<br /> 
+2. ./laydb<br />
